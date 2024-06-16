@@ -1,10 +1,4 @@
 {
   "version": 2,
-
-  "redirects": [
-    {
-      "src": "/(.*)",
-      "dest": "./server/index.ts"
-    }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/server/index.ts" }]
 }
