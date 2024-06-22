@@ -44,6 +44,8 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({
   const updateMessages = () =>
     setInterval(async () => {
       try {
+        const mailsToUpdate = [];
+
         const newMailsResponse = await fetch(
           `${import.meta.env.VITE_BASE_API ?? ""}/api/mail/update`
         );
@@ -52,7 +54,12 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({
 
         if (newMails?.length) {
           for (const mail of newMails) {
-            if (mail.messages?.length) toast(`${mail.email} got new message`);
+            if (mail.messages?.length) {
+              toast.success(`${mail.email} got new message`, {
+                duration: 6000,
+              });
+              mailsToUpdate.push(mail.email);
+            }
           }
         }
 
@@ -61,6 +68,7 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({
           headers: {
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({ mails: mailsToUpdate }),
         });
       } catch (error) {
         console.log(error);

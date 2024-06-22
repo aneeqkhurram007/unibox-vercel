@@ -226,7 +226,9 @@ export const seenMessage = async (request: Request, response: Response) => {
 };
 
 export const seenAllMessages = async (request: Request, response: Response) => {
-  for (const email of Object.keys(state.emailClients)) {
+  const { mails } = request.body;
+
+  for (const email of mails) {
     try {
       const emailData = state.accounts.find((item) => item["Email"] === email);
 
