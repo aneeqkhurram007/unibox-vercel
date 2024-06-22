@@ -39,10 +39,10 @@ async function bootStrapApplication() {
   }).forEach((item) => app.use("/api", require(`./routes/${item}`).default));
 
   if (configs.NODE_ENV !== "development") {
-    app.use(express.static(path.resolve("../client/dist")));
+    app.use(express.static(path.resolve("./client/dist")));
 
     app.use("/", (request, response) => {
-      response.sendFile(path.resolve("../client/dist/index.html"));
+      response.sendFile(path.resolve("./client/dist/index.html"));
     });
   }
 
