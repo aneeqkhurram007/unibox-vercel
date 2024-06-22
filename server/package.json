@@ -28,6 +28,7 @@
     "imapflow": "^1.0.162",
     "mailparser": "^3.7.1",
     "morgan": "^1.10.0",
+    "node-global-proxy": "^1.0.1",
     "nodemailer": "^6.9.13"
   },
   "devDependencies": {

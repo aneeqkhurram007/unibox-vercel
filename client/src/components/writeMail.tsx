@@ -27,13 +27,16 @@ export const WriteMail = () => {
         return;
       }
 
-      const response = await fetch(`/api/mail`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ to, from: email, subject, body }),
-      });
+      const response = await fetch(
+        `${import.meta.env.VITE_BASE_API ?? ""}/api/mail`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ to, from: email, subject, body }),
+        }
+      );
 
       if (response.ok) toast("Message sent successfully");
     } catch (error) {

@@ -8,7 +8,9 @@ export const SelectMailBox = () => {
 
   const fetchUserMail = useCallback(async (email: string) => {
     try {
-      const data = await (await fetch(`/api/mail/${email}`)).json();
+      const data = await (
+        await fetch(`${import.meta.env.VITE_BASE_API ?? ""}/api/mail/${email}`)
+      ).json();
 
       return data;
     } catch (error) {

@@ -1,134 +1,13 @@
 import { Request, Response } from "express";
-import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
-import { createTransport } from "nodemailer";
-import convertCsvToJson from "convert-csv-to-json";
-import path from "path";
-
-const DEFAULTS = {
-  imap: {
-    host: "hwsrv-1223902.hostwindsdns.com",
-    port: 993,
-    proxy: "http://vfdwsyxl:ab6ezjy7qqbg@45.94.47.66:8110/",
-    maxTimeout: 60000,
-  },
-  smtp: {
-    host: "hwsrv-1223902.hostwindsdns.com",
-    port: 465,
-    proxy: "http://vfdwsyxl:ab6ezjy7qqbg@45.94.47.66:8110/",
-    maxTimeout: 60000,
-  },
-};
-
-const getSMTPClient = ({
-  host,
-  port,
-  user,
-  pass,
-}: {
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
-}) =>
-  createTransport({
-    host: host || DEFAULTS.smtp.host,
-    port: port || DEFAULTS.smtp.port,
-    secure: true,
-    auth: {
-      user,
-      pass,
-    },
-    dnsTimeout: DEFAULTS.smtp.maxTimeout,
-    socketTimeout: DEFAULTS.smtp.maxTimeout,
-    greetingTimeout: DEFAULTS.smtp.maxTimeout,
-    connectionTimeout: DEFAULTS.smtp.maxTimeout,
-  });
-
-const getImapClient = ({
-  host,
-  port,
-  user,
-  pass,
-}: {
-  host: string;
-  port: number;
-  user: string;
-  pass: string;
-}) =>
-  new ImapFlow({
-    host: host || DEFAULTS.imap.host,
-    port: port || DEFAULTS.imap.port,
-    secure: true,
-    auth: {
-      user,
-      pass,
-    },
-    proxy: DEFAULTS.imap.proxy,
-    tls: {
-      rejectUnauthorized: false,
-    },
-    greetingTimeout: DEFAULTS.imap.maxTimeout,
-    connectionTimeout: DEFAULTS.imap.maxTimeout,
-    socketTimeout: DEFAULTS.imap.maxTimeout,
-    maxIdleTime: DEFAULTS.imap.maxTimeout,
-  });
-
-export const getById = async (request: Request, response: Response) => {
-  try {
-    const email = request.params.email;
-
-    const emailData = convertCsvToJson
-      .fieldDelimiter(",")
-      .getJsonFromCsv(path.resolve("data", "data.csv"))
-      .find((item) => item["Email"] === email);
-
-    if (!emailData) throw new Error("Email does not exist");
-
-    const client = getImapClient({
-      host: emailData["SMTPHost"],
-      pass: emailData["password"],
-      user: emailData["Email"],
-      port: emailData["IMAPPort"],
-    });
-
-    await client.connect();
-
-    let lock = await client.getMailboxLock("INBOX");
-    const messages = [];
-
-    try {
-      for await (let message of client.fetch("1:*", {
-        envelope: true,
-        bodyStructure: true,
-        source: true,
-      })) {
-        const parsedMail = await simpleParser(message.source);
-
-        messages.push({
-          id: message.uid,
-          envelope: message.envelope,
-          mail: parsedMail,
-        });
-      }
-    } catch (error) {
-      console.error("Message Error: ", error);
-    } finally {
-      lock.release();
-      await client.logout();
-      return response.json(messages);
-    }
-  } catch (error) {
-    console.error("Client Error: ", error);
-    return response.json([]);
-  }
-};
+import { state } from "@/store/state";
+import { getImapClient, getSMTPClient } from "@/libs/emailClients";
+import { ImapFlow } from "imapflow";
 
 export const get = async (request: Request, response: Response) => {
   try {
-    const emailData = convertCsvToJson
-      .fieldDelimiter(",")
-      .getJsonFromCsv(path.resolve("data", "data.csv"));
+    const emailData = state.accounts;
+
     return response.json(
       emailData?.map((mail) => ({
         email: mail["Email"],
@@ -146,10 +25,7 @@ export const send = async (request: Request, response: Response) => {
   try {
     const { to, from, subject, body } = request.body;
 
-    const emailData = convertCsvToJson
-      .fieldDelimiter(",")
-      .getJsonFromCsv(path.resolve("data", "data.csv"))
-      .find((item) => item["Email"] === from);
+    const emailData = state.accounts.find((item) => item["Email"] === from);
 
     if (!emailData) throw new Error("Email does not exist");
 
@@ -174,4 +50,224 @@ export const send = async (request: Request, response: Response) => {
     console.log(error);
     return response.status(400).json({});
   }
+};
+
+export const getById = async (request: Request, response: Response) => {
+  const email = request.params.email;
+  try {
+    const emailData = state.accounts.find((item) => item["Email"] === email);
+
+    if (!emailData) throw new Error("Email does not exist");
+
+    let client = (state as any).emailClients?.[emailData["Email"]];
+
+    if (!client) {
+      client = getImapClient({
+        host: emailData["SMTPHost"],
+        pass: emailData["password"],
+        user: emailData["Email"],
+        port: emailData["IMAPPort"],
+      });
+
+      await client.connect();
+
+      (state as any).emailClients[emailData["Email"]] = client;
+
+      console.log(`Client added to state in controller`);
+    }
+
+    let lock = await client.getMailboxLock("INBOX");
+    const messages = [];
+
+    try {
+      for await (let message of client.fetch("1:*", {
+        envelope: true,
+        bodyStructure: true,
+        source: true,
+      })) {
+        const parsedMail = await simpleParser(message.source);
+
+        messages.push({
+          id: message.uid,
+          envelope: message.envelope,
+          mail: parsedMail,
+        });
+      }
+    } catch (error) {
+      console.error("Message Error: ", error);
+      (state as any).emailClients[emailData["Email"]] = null;
+    } finally {
+      lock.release();
+      return response.json(messages);
+    }
+  } catch (error) {
+    console.error("Client Error: ", error);
+    (state as any).emailClients[email] = null;
+    return response.json([]);
+  }
+};
+
+export const updateMails = async (request: Request, response: Response) => {
+  const mails = [];
+  for (const email of Object.keys(state.emailClients)) {
+    try {
+      const emailData = (state.accounts as any).find(
+        (item: any) => item["Email"] === email
+      );
+
+      let client = (state as any).emailClients?.[emailData["Email"]];
+
+      if (!client) {
+        client = getImapClient({
+          host: emailData["SMTPHost"],
+          pass: emailData["password"],
+          user: emailData["Email"],
+          port: emailData["IMAPPort"],
+        });
+
+        await client.connect();
+
+        (state as any).emailClients[emailData["Email"]] = client;
+
+        console.log(`Client added to state in controller`);
+      }
+
+      let lock = await client.getMailboxLock("INBOX");
+      const messages = [];
+
+      try {
+        for await (let message of client.fetch(
+          {
+            seen: false,
+          },
+          {
+            envelope: true,
+            bodyStructure: true,
+            source: true,
+          }
+        )) {
+          messages.push({
+            id: message.uid,
+            envelope: message.envelope,
+          });
+        }
+      } catch (error) {
+        console.error("Message Error: ", error);
+        (state as any).emailClients[emailData["Email"]] = null;
+      } finally {
+        lock.release();
+        mails.push({
+          email,
+          messages,
+        });
+      }
+    } catch (error) {
+      console.error("Client Error: ", error);
+      (state as any).emailClients[email] = null;
+    }
+  }
+  return response.json(mails);
+};
+
+export const getState = (request: Request, response: Response) => {
+  response.json({
+    accounts: state.accounts,
+    emailClients: Object.keys(state.emailClients),
+  });
+};
+
+export const seenMessage = async (request: Request, response: Response) => {
+  const { email } = request.params;
+
+  try {
+    const emailData = state.accounts.find((item) => item["Email"] === email);
+
+    if (!emailData) throw new Error("Email does not exist");
+
+    let client: ImapFlow = (state as any).emailClients?.[emailData["Email"]];
+
+    if (!client) {
+      client = getImapClient({
+        host: emailData["SMTPHost"],
+        pass: emailData["password"],
+        user: emailData["Email"],
+        port: emailData["IMAPPort"],
+      });
+
+      await client.connect();
+
+      (state as any).emailClients[emailData["Email"]] = client;
+
+      console.log(`Client added to state in controller`);
+    }
+
+    let lock = await client.getMailboxLock("INBOX");
+
+    try {
+      await client.messageFlagsAdd(
+        {
+          seen: false,
+        },
+        ["Seen"]
+      );
+    } catch (error) {
+      console.error("Message Error: ", error);
+      (state as any).emailClients[emailData["Email"]] = null;
+    } finally {
+      lock.release();
+    }
+
+    response.sendStatus(200);
+  } catch (error) {
+    console.error("Client Error: ", error);
+    (state as any).emailClients[email] = null;
+    response.sendStatus(400);
+  }
+};
+
+export const seenAllMessages = async (request: Request, response: Response) => {
+  for (const email of Object.keys(state.emailClients)) {
+    try {
+      const emailData = state.accounts.find((item) => item["Email"] === email);
+
+      if (!emailData) throw new Error("Email does not exist");
+
+      let client: ImapFlow = (state as any).emailClients?.[emailData["Email"]];
+
+      if (!client) {
+        client = getImapClient({
+          host: emailData["SMTPHost"],
+          pass: emailData["password"],
+          user: emailData["Email"],
+          port: emailData["IMAPPort"],
+        });
+
+        await client.connect();
+
+        (state as any).emailClients[emailData["Email"]] = client;
+
+        console.log(`Client added to state in controller`);
+      }
+
+      let lock = await client.getMailboxLock("INBOX");
+
+      try {
+        await client.messageFlagsAdd(
+          {
+            seen: false,
+          },
+          ["\\Seen"]
+        );
+      } catch (error) {
+        console.error("Message Error: ", error);
+        (state as any).emailClients[emailData["Email"]] = null;
+      } finally {
+        lock.release();
+      }
+    } catch (error) {
+      console.error("Client Error: ", error);
+      (state as any).emailClients[email] = null;
+    }
+  }
+  response.sendStatus(200);
 };

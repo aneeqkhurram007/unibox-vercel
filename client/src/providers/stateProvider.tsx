@@ -9,6 +9,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import toast from "react-hot-toast";
 
 type Mail = {
   email: string;
@@ -40,9 +41,41 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({
     mails: [],
   });
 
+  const updateMessages = () =>
+    setInterval(async () => {
+      try {
+        const newMailsResponse = await fetch(
+          `${import.meta.env.VITE_BASE_API ?? ""}/api/mail/update`
+        );
+
+        const newMails = await newMailsResponse.json();
+
+        if (newMails?.length) {
+          for (const mail of newMails) {
+            if (mail.messages?.length) toast(`${mail.email} got new message`);
+          }
+        }
+
+        await fetch(`${import.meta.env.VITE_BASE_API ?? ""}/api/mail`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+      } catch (error) {
+        console.log(error);
+      }
+    }, 30000);
+
+  useEffect(() => {
+    updateMessages();
+  }, []);
+
   const fetchUserMails = useCallback(async () => {
     try {
-      const data = await (await fetch(`/api/mail`)).json();
+      const data = await (
+        await fetch(`${import.meta.env.VITE_BASE_API ?? ""}/api/mail`)
+      ).json();
       setMails(data);
     } catch (error) {
       console.log(error);

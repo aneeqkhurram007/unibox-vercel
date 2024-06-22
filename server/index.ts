@@ -6,6 +6,8 @@ import cors from "cors";
 import morgan from "morgan";
 import { configs } from "@/configs";
 import path from "path";
+import { openAllConnections } from "./libs/mail-listener";
+import proxy from "node-global-proxy";
 
 async function bootStrapApplication() {
   const app = express();
@@ -21,6 +23,16 @@ async function bootStrapApplication() {
   app.use(cors());
 
   app.use(morgan("dev"));
+
+  proxy.setConfig("http://rybkxqth:wshze149gw3z@45.94.47.66:8110/");
+
+  proxy.start();
+
+  proxy.system();
+
+  console.log(`Caliberating Emails`);
+
+  openAllConnections();
 
   fs.readdirSync("./routes", {
     encoding: "utf-8",
