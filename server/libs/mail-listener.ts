@@ -8,9 +8,9 @@ export const openAllConnections = async () => {
     .fieldDelimiter(",")
     .getJsonFromCsv(path.resolve("data", "data.csv"));
 
-  (state as any).accounts = mails
-    .filter((mail) => mail["Email"] && mail["password"])
-    .slice(0, 10);
+  (state as any).accounts = mails.filter(
+    (mail) => mail["Email"] && mail["password"]
+  );
 
   for (const emailData of state.accounts) {
     const client = getImapClient({
