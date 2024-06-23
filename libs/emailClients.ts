@@ -5,7 +5,7 @@ const DEFAULTS = {
   imap: {
     host: "hwsrv-1223902.hostwindsdns.com",
     port: 993,
-    proxy: "http://rybkxqth:wshze149gw3z@38.154.227.167:5868/",
+    proxy: "http://rybkxqth:wshze149gw3z@185.199.228.220:7300/",
     maxTimeout: 60000,
   },
   smtp: {
