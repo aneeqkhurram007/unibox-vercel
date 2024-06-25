@@ -8,6 +8,8 @@ import { configs } from "@/configs";
 import path from "path";
 import { openAllConnections } from "./libs/mail-listener";
 import proxy from "node-global-proxy";
+import { getProxy } from "./libs/emailClients";
+import { state } from "./store/state";
 
 async function bootStrapApplication() {
   const app = express();
@@ -24,7 +26,9 @@ async function bootStrapApplication() {
 
   app.use(morgan("dev"));
 
-  proxy.setConfig("http://rybkxqth:wshze149gw3z@45.94.47.66:8110/");
+  getProxy();
+
+  proxy.setConfig(state.currentProxy);
 
   proxy.start();
 

@@ -54,9 +54,10 @@ export const send = async (request: Request, response: Response) => {
 
 export const getById = async (request: Request, response: Response) => {
   const email = request.params.email;
-  try {
-    const emailData = state.accounts.find((item) => item["Email"] === email);
 
+  const emailData = state.accounts.find((item) => item["Email"] === email);
+
+  async function worker() {
     if (!emailData) throw new Error("Email does not exist");
 
     let client = (state as any).emailClients?.[emailData["Email"]];
@@ -100,21 +101,42 @@ export const getById = async (request: Request, response: Response) => {
       lock.release();
       return response.json(messages);
     }
-  } catch (error) {
+  }
+
+  try {
+    await worker();
+  } catch (error: any) {
     console.error("Client Error: ", error);
-    (state as any).emailClients[email] = null;
+    if (error?.message.includes("Connection" || "Proxy")) {
+      const client = getImapClient({
+        host: (emailData as any)["SMTPHost"],
+        pass: (emailData as any)["password"],
+        user: (emailData as any)["Email"],
+        port: (emailData as any)["IMAPPort"],
+      });
+
+      await client.connect();
+
+      console.log(`Email:${(emailData as any)["Email"]}`);
+
+      (state as any).emailClients[(emailData as any)["Email"]] = client;
+
+      await worker();
+    } else {
+      (state as any).emailClients[email] = null;
+    }
     return response.json([]);
   }
 };
 
 export const updateMails = async (request: Request, response: Response) => {
-  const mails = [];
+  const mails: { email: string; messages: { id: any; envelope: any }[] }[] = [];
   for (const email of Object.keys(state.emailClients)) {
-    try {
-      const emailData = (state.accounts as any).find(
-        (item: any) => item["Email"] === email
-      );
+    const emailData = (state.accounts as any).find(
+      (item: any) => item["Email"] === email
+    );
 
+    async function worker() {
       let client = (state as any).emailClients?.[emailData["Email"]];
 
       if (!client) {
@@ -161,9 +183,30 @@ export const updateMails = async (request: Request, response: Response) => {
           messages,
         });
       }
-    } catch (error) {
+    }
+
+    try {
+      await worker();
+    } catch (error: any) {
       console.error("Client Error: ", error);
-      (state as any).emailClients[email] = null;
+      if (error?.message.includes("Connection" || "Proxy")) {
+        const client = getImapClient({
+          host: (emailData as any)["SMTPHost"],
+          pass: (emailData as any)["password"],
+          user: (emailData as any)["Email"],
+          port: (emailData as any)["IMAPPort"],
+        });
+
+        await client.connect();
+
+        console.log(`Email:${(emailData as any)["Email"]}`);
+
+        (state as any).emailClients[(emailData as any)["Email"]] = client;
+
+        await worker();
+      } else {
+        (state as any).emailClients[email] = null;
+      }
     }
   }
   return response.json(mails);
