@@ -23,7 +23,7 @@
     "axios": "^1.7.2",
     "convert-csv-to-json": "^2.47.0",
     "cors": "^2.8.5",
-    "express": "^4.19.2",
+    "express": "^4.20.0",
     "express-validator": "^7.1.0",
     "imapflow": "^1.0.162",
     "mailparser": "^3.7.1",
